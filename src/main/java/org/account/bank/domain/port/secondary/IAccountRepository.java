@@ -12,4 +12,7 @@ public interface IAccountRepository {
 
     void addOperation(String clientId, Operation operation) throws BankAccountNotFoundException;
 
+    List<Operation> findOperationsByClientId(String accountId) throws BankAccountNotFoundException;
+
+
 }

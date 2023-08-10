@@ -31,5 +31,14 @@ public interface IOperationService {
      */
     void withdraw(String clientId, BigDecimal amount) throws InsufficientCreditException, NegativeAmountException, BankAccountNotFoundException;
 
+    /**
+     * In order to check my operations
+     * As a bank client
+     * I want to see the history (data, date, amount, balance) of my operations
+     *
+     * @param clientId : l'identifiant du compte client
+     * @return La liste des opérations effectués sur le compte client
+     */
+    String printOperations(String clientId) throws BankAccountNotFoundException;
 
 }

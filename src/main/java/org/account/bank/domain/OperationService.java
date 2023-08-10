@@ -5,10 +5,14 @@ import org.account.bank.domain.exception.InsufficientCreditException;
 import org.account.bank.domain.exception.NegativeAmountException;
 import org.account.bank.domain.port.primary.IOperationService;
 import org.account.bank.domain.port.secondary.IAccountRepository;
+import org.account.bank.domain.port.secondary.IOperationPrinter;
 import org.account.bank.domain.port.secondary.ITimeService;
 
 import java.math.BigDecimal;
+import java.util.ArrayDeque;
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collector;
 
 public class OperationService implements IOperationService {
 
@@ -21,10 +25,13 @@ public class OperationService implements IOperationService {
 
     private final IAccountRepository accountRepository;
 
+    private final IOperationPrinter printer;
 
-    public OperationService(ITimeService timeService, IAccountRepository accountRepository) {
+
+    public OperationService(ITimeService timeService, IAccountRepository accountRepository, IOperationPrinter printer) {
         this.timeService = timeService;
         this.accountRepository = accountRepository;
+        this.printer = printer;
     }
 
     @Override
@@ -49,11 +56,22 @@ public class OperationService implements IOperationService {
             Operation newOperation = new Operation(timeService.utcNow(), amount, OperationType.WITHDRAW, balance.subtract(amount));
             accountRepository.addOperation(clientId, newOperation);
         } else {
-            String InsufficientCreditMessage = String.format(INSUFFICIENT_CREDIT, balance);
+            String InsufficientCreditMessage = String.format(INSUFFICIENT_CREDIT, amount);
             throw new InsufficientCreditException(InsufficientCreditMessage);
         }
     }
 
+    @Override
+    public String printOperations(String clientId) throws BankAccountNotFoundException {
+        List<Operation> operations = accountRepository.findOperationsByClientId(clientId)
+                .stream()
+                .collect(Collector.of(() -> new ArrayDeque<Operation>(), (a, b) -> a.addFirst(b), (a, b)->a))
+                .stream()
+                .toList();
+
+        return printer.print(operations, clientId);
+
+    }
     private void checkAmountValue(BigDecimal amount) throws NegativeAmountException {
 
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {

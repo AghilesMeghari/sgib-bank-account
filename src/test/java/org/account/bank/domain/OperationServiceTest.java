@@ -4,6 +4,7 @@ import org.account.bank.domain.exception.BankAccountNotFoundException;
 import org.account.bank.domain.exception.InsufficientCreditException;
 import org.account.bank.domain.exception.NegativeAmountException;
 import org.account.bank.domain.port.secondary.IAccountRepository;
+import org.account.bank.domain.port.secondary.IOperationPrinter;
 import org.account.bank.domain.port.secondary.ITimeService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -14,8 +15,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
 
@@ -33,6 +37,9 @@ public class OperationServiceTest {
     @Mock
     private ITimeService timeService;
 
+    @Mock
+    private IOperationPrinter operationsPrinter;
+
 
     @Test
     @DisplayName("Lorsque l'on credite le compte du client '01' avec des montants positifs")
@@ -47,6 +54,7 @@ public class OperationServiceTest {
         operationService.deposit(CLIENT_01, depositAmount);
 
         verify(accountRepository).addOperation(CLIENT_01, operation);
+        verifyNoInteractions(operationsPrinter);
     }
 
 
@@ -56,10 +64,12 @@ public class OperationServiceTest {
 
         BigDecimal depositAmount = BigDecimal.valueOf(-500);
 
-        assertThrows(NegativeAmountException.class, () -> {
-            operationService.deposit(CLIENT_01, depositAmount);
-        });
+        assertThatThrownBy(() -> operationService.deposit(CLIENT_01, depositAmount))
+                .isInstanceOf(NegativeAmountException.class)
+                .hasMessage(String.format("Impossible de crediter ou de débiter le compte avec un montant négatif : %f", depositAmount));
+
         verifyNoInteractions(accountRepository);
+        verifyNoInteractions(operationsPrinter);
 
     }
 
@@ -68,10 +78,13 @@ public class OperationServiceTest {
     void testDeposit_whenAmount_isNull() {
 
         BigDecimal depositAmount = BigDecimal.valueOf(0);
-        assertThrows(NegativeAmountException.class, () -> {
-            operationService.deposit(CLIENT_01, depositAmount);
-        });
+
+        assertThatThrownBy(() -> operationService.deposit(CLIENT_01, depositAmount))
+                .isInstanceOf(NegativeAmountException.class)
+                .hasMessage(String.format("Impossible de crediter ou de débiter le compte avec un montant négatif : %f", depositAmount));
+
         verifyNoInteractions(accountRepository);
+        verifyNoInteractions(operationsPrinter);
     }
 
     @Test
@@ -81,10 +94,13 @@ public class OperationServiceTest {
         BigDecimal depositAmount = BigDecimal.valueOf(10);
         when(accountRepository.findLastOperationByClientId(CLIENT_01))
                 .thenThrow(new BankAccountNotFoundException(String.format("Compte inexistant : %s", CLIENT_01)));
-        assertThrows(BankAccountNotFoundException.class, () -> {
-            operationService.deposit(CLIENT_01, depositAmount);
-        });
+
+        assertThatThrownBy(() -> operationService.deposit(CLIENT_01, depositAmount))
+                .isInstanceOf(BankAccountNotFoundException.class)
+                .hasMessage(String.format("Compte inexistant : %s", CLIENT_01));
+
         verifyNoMoreInteractions(accountRepository);
+        verifyNoInteractions(operationsPrinter);
     }
 
     @Test
@@ -103,6 +119,7 @@ public class OperationServiceTest {
 
         verify(accountRepository).addOperation(CLIENT_01, operation);
         verifyNoMoreInteractions(accountRepository);
+        verifyNoInteractions(operationsPrinter);
     }
 
     @Test
@@ -110,10 +127,13 @@ public class OperationServiceTest {
     void testWithdraw_whenAmount_isNegative() {
 
         BigDecimal withdrawalAmount = BigDecimal.valueOf(-50);
-        assertThrows(NegativeAmountException.class, () -> {
-            operationService.withdraw(CLIENT_01, withdrawalAmount);
-        });
+
+        assertThatThrownBy(() -> operationService.withdraw(CLIENT_01, withdrawalAmount))
+                .isInstanceOf(NegativeAmountException.class)
+                .hasMessage(String.format("Impossible de crediter ou de débiter le compte avec un montant négatif : %f", withdrawalAmount));
+
         verifyNoInteractions(accountRepository);
+        verifyNoInteractions(operationsPrinter);
     }
 
     @Test
@@ -121,10 +141,13 @@ public class OperationServiceTest {
     void testWithdraw_whenAmount_isNull() {
 
         BigDecimal withdrawalAmount = BigDecimal.valueOf(0);
-        assertThrows(NegativeAmountException.class, () -> {
-            operationService.withdraw(CLIENT_01, withdrawalAmount);
-        });
+
+        assertThatThrownBy(() -> operationService.withdraw(CLIENT_01, withdrawalAmount))
+                .isInstanceOf(NegativeAmountException.class)
+                .hasMessage(String.format("Impossible de crediter ou de débiter le compte avec un montant négatif : %f", withdrawalAmount));
+
         verifyNoInteractions(accountRepository);
+        verifyNoInteractions(operationsPrinter);
     }
 
     @Test
@@ -136,12 +159,13 @@ public class OperationServiceTest {
 
         when(accountRepository.findLastOperationByClientId(CLIENT_01)).thenReturn(Optional.of(lastOperation));
 
-        assertThrows(InsufficientCreditException.class, () -> {
-            operationService.withdraw(CLIENT_01, withdrawalAmount);
-        });
+        assertThatThrownBy(() -> operationService.withdraw(CLIENT_01, withdrawalAmount))
+                .isInstanceOf(InsufficientCreditException.class)
+                .hasMessage(String.format("Crédit insuffisant pour retirer le montant : %f", withdrawalAmount));
 
         verify(accountRepository).findLastOperationByClientId(CLIENT_01);
         verifyNoMoreInteractions(accountRepository);
+        verifyNoInteractions(operationsPrinter);
     }
 
     @Test
@@ -152,10 +176,66 @@ public class OperationServiceTest {
         when(accountRepository.findLastOperationByClientId(CLIENT_01))
                 .thenThrow(new BankAccountNotFoundException(String.format("Compte inexistant : %s", CLIENT_01)));
 
-        assertThrows(BankAccountNotFoundException.class, () -> {
-            operationService.withdraw(CLIENT_01, withDrawAmount);
-        });
+        assertThatThrownBy(() -> operationService.withdraw(CLIENT_01,withDrawAmount))
+                .isInstanceOf(BankAccountNotFoundException.class)
+                .hasMessage(String.format("Compte inexistant : %s", CLIENT_01));
+
         verify(accountRepository).findLastOperationByClientId(CLIENT_01);
+        verifyNoMoreInteractions(accountRepository);
+        verifyNoInteractions(operationsPrinter);
+    }
+
+    @Test
+    @DisplayName("Lorsque l'on souhaite consulter l'historique des operations du compte client 01")
+    void testPrintHistoric_ofAccount_operations() throws BankAccountNotFoundException {
+
+        String expectedOutput = """
+                Client ID | OperationType | Amount | Date
+                client01 | WITHDRAW | 50 | 2023-07-28
+                client01 | DEPOSIT | 100 | 2023-07-26
+                """;
+
+        List<Operation> operations = List.of(
+                new Operation(LocalDate.of(2023, 7, 26), BigDecimal.valueOf(100), OperationType.DEPOSIT, BigDecimal.valueOf(100)),
+                new Operation(LocalDate.of(2023, 7, 28), BigDecimal.valueOf(50), OperationType.WITHDRAW, BigDecimal.valueOf(50))
+        );
+
+        when(accountRepository.findOperationsByClientId(CLIENT_01)).thenReturn(operations);
+        when(operationsPrinter.print(anyList(), eq(CLIENT_01))).thenReturn(expectedOutput);
+
+        operationService.printOperations(CLIENT_01);
+
+        verify(operationsPrinter, times(1)).print(anyList(), anyString());
+        verifyNoMoreInteractions(operationsPrinter);
+
+        verify(accountRepository, times(1)).findOperationsByClientId(CLIENT_01);
+        verifyNoMoreInteractions(accountRepository);
+
+        String actualOutput = operationService.printOperations(CLIENT_01);
+
+        String[] actualLines = actualOutput.trim().split("\\r?\\n");
+        String[] expectedLines = expectedOutput.trim().split("\\r?\\n");
+
+        assertThat(actualLines).hasSameSizeAs(expectedLines);
+
+        for (int i = 0; i < actualLines.length; i++) {
+            assertThat(actualLines[i].trim()).isEqualTo(expectedLines[i].trim());
+        }
+
+    }
+
+    @Test
+    @DisplayName("Lorsque l'on souhaite consulter l'historique des operations d'un compte client non existant")
+    void testPrintHistoric_whenAccount_isNotFound() throws BankAccountNotFoundException {
+
+        when(accountRepository.findOperationsByClientId(CLIENT_01))
+                .thenThrow(new BankAccountNotFoundException(String.format("Compte inexistant : %s", CLIENT_01)));
+
+        assertThatThrownBy(() -> operationService.printOperations(CLIENT_01))
+                .isInstanceOf(BankAccountNotFoundException.class)
+                .hasMessage(String.format("Compte inexistant : %s", CLIENT_01));
+
+        verifyNoInteractions(operationsPrinter);
         verifyNoMoreInteractions(accountRepository);
     }
 

@@ -1,6 +1,7 @@
 package org.account.bank.domain;
 
 import org.account.bank.domain.exception.BankAccountNotFoundException;
+import org.account.bank.domain.exception.InsufficientCreditException;
 import org.account.bank.domain.exception.NegativeAmountException;
 import org.account.bank.domain.port.primary.IOperationService;
 import org.account.bank.domain.port.secondary.IAccountRepository;
@@ -11,7 +12,9 @@ import java.util.Optional;
 
 public class OperationService implements IOperationService {
 
-    private static final String NEGATIVE_DEPOSIT_AMOUNT = "Impossible de crediter le compte avec un montant négatif : %f";
+    private static final String NEGATIVE_DEPOSIT_AMOUNT = "Impossible de crediter ou de débiter le compte avec un montant négatif : %f";
+
+    private static final String INSUFFICIENT_CREDIT = "Crédit insuffisant pour retirer le montant : %f";
 
 
     private final ITimeService timeService;
@@ -34,6 +37,21 @@ public class OperationService implements IOperationService {
         Operation newOperation = new Operation(timeService.utcNow(), amount, OperationType.DEPOSIT, balance.add(amount));
         accountRepository.addOperation(clientId, newOperation);
 
+    }
+
+    @Override
+    public void withdraw(String clientId, BigDecimal amount) throws InsufficientCreditException, NegativeAmountException, BankAccountNotFoundException {
+        checkAmountValue(amount);
+
+        BigDecimal balance = getBalance(clientId);
+
+        if (amount.compareTo(balance) <= 0) {
+            Operation newOperation = new Operation(timeService.utcNow(), amount, OperationType.WITHDRAW, balance.subtract(amount));
+            accountRepository.addOperation(clientId, newOperation);
+        } else {
+            String InsufficientCreditMessage = String.format(INSUFFICIENT_CREDIT, balance);
+            throw new InsufficientCreditException(InsufficientCreditMessage);
+        }
     }
 
     private void checkAmountValue(BigDecimal amount) throws NegativeAmountException {
